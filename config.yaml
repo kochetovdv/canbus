@@ -1,0 +1,44 @@
+data_file: "data.csv"
+localtime: "14:33:20.896"
+output_file: "output.csv"
+messages:
+  - can_id: 280
+    start_bit: 40
+    bit_length: 8
+    dlc: 8
+    message: "Положение педали газа"
+    method: "MSB"
+    scale: 0.4
+    offset: 0
+  - can_id: 280
+    start_bit: 16
+    bit_length: 16
+    dlc: 8
+    message: "Обороты"
+    method: "MSB"
+    scale: 0.25
+    offset: 0
+  - can_id: 320
+    start_bit: 46
+    bit_length: 10
+    dlc: 8
+    message: "Скорость"
+    method: "MSB"
+    scale: 0.32
+    offset: 0
+  - can_id: 320
+    start_bit: 25
+    bit_length: 15
+    dlc: 8
+    message: "Скорость какого-то вала"
+    method: "MSB"
+    scale: 0.01
+    offset: 0
+  - can_id: 520
+    start_bit: 40
+    bit_length: 20
+    dlc: 8
+    message: "Пробег"
+    method: "MSB"
+    scale: 0
+    offset: 0
