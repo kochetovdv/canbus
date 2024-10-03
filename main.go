@@ -1,14 +1,16 @@
 package main
 
 import (
-	"canbus_temp/bitutils"
-	"encoding/csv"
+	"canbus/bitutils"
 	"flag"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"encoding/csv"
+	"encoding/hex"
 
 	"gopkg.in/yaml.v3"
 )
@@ -35,7 +37,7 @@ type Message struct {
 	BitLength  int     `yaml:"bit_length"`
 	Dlc        int     `yaml:"dlc"`
 	Message    string  `yaml:"message"`
-	Method     string  `yaml:"method"`  // LSB или MSB
+	Method     string  `yaml:"method"` // LSB или MSB
 	Scale      float64 `yaml:"scale"`
 	Offset     float64 `yaml:"offset"`
 }
@@ -98,11 +100,8 @@ func parseCSV(fileName string) ([]Record, error) {
 }
 
 // calculateValue вычисляет Value с учетом Scale и Offset
-func calculateValue(dec int64, scale, offset float64) float64 {
-	if scale != 0 || offset != 0 {
-		return float64(dec)*scale + offset
-	}
-	return float64(dec)
+func calculateValue(dec uint64, scale, offset float64) float64 {
+	return float64(dec)*scale + offset
 }
 
 // parseTimeWithCurrentDate добавляет текущую дату к времени
@@ -143,51 +142,48 @@ func processRecords(records []Record, config *Config, outputFile string) error {
 	for _, message := range config.Messages {
 		for _, record := range records {
 			if record.ID == message.CanID {
-				var binStr string
-				switch message.Method {
-				case "LSB":
-					binStr, err = bitutils.HexToBinLSB(record.HexValue)
-				case "MSB":
-					binStr, err = bitutils.HexToBinMSB(record.HexValue)
-				default:
-					fmt.Printf("Неизвестный метод конвертации для сообщения с ID %s: %v\n", record.ID, message.Method)
-					continue
-				}
-	
+				// Декодируем HEX значение в массив байтов
+				dataBytes, err := hex.DecodeString(strings.ReplaceAll(record.HexValue, " ", ""))
 				if err != nil {
-					fmt.Printf("Ошибка конвертации HEX в BIN для записи с ID %s: %v\n", record.ID, err)
+					fmt.Printf("Ошибка декодирования HEX для записи с ID %s: %v\n", record.ID, err)
 					continue
 				}
-	
-				// Учитываем DLC, проверяем длину бинарной строки
-				maxBits := message.Dlc * 8
-				if message.StartBit+message.BitLength > maxBits {
-					fmt.Printf("Ошибка: диапазон битов выходит за пределы DLC для записи с ID %s\n", record.ID)
-					continue
+
+				// Определяем порядковость (LSB или MSB)
+				isIntel := (message.Method == "LSB")
+
+				// Проверяем корректность startBit и bitLength
+				maxBits := len(dataBytes) * 8
+				var startBit int
+				if isIntel {
+					startBit = message.StartBit
+					if startBit+message.BitLength > maxBits {
+						fmt.Printf("Ошибка: диапазон битов выходит за пределы данных для записи с ID %s\n", record.ID)
+						continue
+					}
+				} else {
+					startBit = message.StartBit
+					if startBit-message.BitLength+1 < 0 {
+						fmt.Printf("Ошибка: диапазон битов выходит за пределы данных для записи с ID %s\n", record.ID)
+						continue
+					}
 				}
-	
-				var processedBits string
-				switch message.Method {
-				case "MSB":
-					processedBits, err = bitutils.ProcessBitsMSB(binStr, message.StartBit, message.BitLength)
-				default:
-					processedBits, err = bitutils.ProcessBits(binStr, message.StartBit, message.BitLength)
-				}
-				
+
+				// Генерируем BIN строку
+				binStr := bitutils.BytesToBin(dataBytes, isIntel)
+
+				// Извлекаем значение сигнала и получаем извлеченные биты
+				value, extractedBits, err := bitutils.ExtractSignal(dataBytes, startBit, message.BitLength, isIntel)
 				if err != nil {
-					fmt.Printf("Ошибка обработки битов для записи с ID %s: %v\n", record.ID, err)
+					fmt.Printf("Ошибка извлечения сигнала для записи с ID %s: %v\n", record.ID, err)
 					continue
 				}
-	
-				decValue, err := bitutils.BinToDec(processedBits)
-				if err != nil {
-					fmt.Printf("Ошибка конвертации BIN в DEC для записи с ID %s: %v\n", record.ID, err)
-					continue
-				}
-	
-				finalTime := localTime.Add(time.Duration(record.Offset) * time.Second)
-				value := calculateValue(decValue, message.Scale, message.Offset)
-	
+
+				// Применяем масштаб и смещение
+				scaledValue := calculateValue(value, message.Scale, message.Offset)
+
+				finalTime := localTime.Add(time.Duration(record.Offset * float64(time.Second)))
+
 				// Запись результата в CSV файл
 				err = writer.Write([]string{
 					finalTime.Format(time.RFC3339),
@@ -197,10 +193,10 @@ func processRecords(records []Record, config *Config, outputFile string) error {
 					strconv.Itoa(message.BitLength),
 					record.HexValue,
 					binStr,
-					processedBits,
-					fmt.Sprintf("%d", decValue),
-					fmt.Sprintf("%.6f", value),
-					message.Message, // Добавлено текстовое сообщение
+					extractedBits,
+					fmt.Sprintf("%d", value),
+					fmt.Sprintf("%.6f", scaledValue),
+					message.Message,
 				})
 				if err != nil {
 					return fmt.Errorf("ошибка при записи в файл %s: %v", outputFile, err)
