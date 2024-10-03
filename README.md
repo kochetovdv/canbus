@@ -69,17 +69,18 @@ messages:
 To run the program, use the following command:
 
 ```bash
-go run main.go -config config.yaml
+./can-decoder -config config.yaml
 ```
 
 ## Command-Line Options
 - -config: The path to the configuration YAML file (default is config.yaml).
 
 ## Output Format
-The decoded messages are saved to the specified output CSV file (output.csv by default) with the following columns:
+The decoded messages are saved to the specified output CSV file (`output.csv` by default) with the following columns:
 
-Time|ID|DLC|StartBit|BitLength|HEX|BIN|BIN_Converted|DEC|Value|Message
-Time|CAN ID|Data Length Code|Start bit of the signal|Length of the signal in bits|Original HEX value|Binary representation|Extracted binary bits|Decimal value|Final calculated value|Message description
+| Time                     | ID  | DLC | StartBit | Length | HEX        | BIN               | BIN_Converted   | DEC   | Value         | Message         |
+|--------------------------|-----|-----|----------|--------|------------|-------------------|-----------------|-------|---------------|-----------------|
+| Timestamp of the message | CAN ID | Data Length Code | Start bit of the signal | Length of the signal in bits | Original HEX value | Binary representation | Extracted binary bits | Decimal value | Final calculated value | Message description |
 
 ## Example Output
 ```css
